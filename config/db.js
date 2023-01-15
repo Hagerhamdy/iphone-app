@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
+mongoose.set("strictQuery", false);
 
 const dbConnection = () => {
     //connect to db
-    mongoose.connect(process.env.MONGO_KEY)
+    mongoose.connect(process.env.MONGO_KEY, { useNewUrlParser: true })
         .then((conn) => {
             console.log(`db Connected : ${conn.connection.host}`);
         })

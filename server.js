@@ -14,6 +14,7 @@ const dbConnection = require('./config/db');
 const ApiError = require('./utils/ApiError');
 const globalError = require('./middlewares/GlobalErrorMiddleware');
 const mountRoutes = require('./routers');
+const {webhookCheckout} = require('./services/orderService');
 
 
 //express app
@@ -25,6 +26,9 @@ app.options('*', cors()); //enable pre-flight 'edit image'
 
 //compress all responses
 app.use(compression());
+
+//checkout webhook
+app.post('/webhook-checkout', express.raw({ type: 'application/json' }), webhookCheckout)
 
 
 //connect db
