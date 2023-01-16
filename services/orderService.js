@@ -7,6 +7,7 @@ const factory = require('./handlerFactory');
 const CartModel = require('../models/cartModel');
 const OrderModel = require('../models/orderModel');
 const ProductModel = require('../models/productModel');
+const UserModel = require('../models/userModel');
 
 
 //@desc Create cash order
@@ -127,7 +128,42 @@ exports.checkoutSession = asyncHandler(async (req, res, next) => {
     res.status(200).json({ status: 'success', session });
 })
 
-exports.webhookCheckout = asyncHandler(async (req, res, next) => { 
+const createCartOrder = async (session) => {
+    const cartId = session.client_reference_id;
+    const shippingAddress = session.metadata;
+    const orderPrice = session.display_items[0].amount / 100;
+
+    const cart = await CartModel.findById(cartId);
+    const user = await UserModel.findOne({ email: session.customer_email })
+
+    //3- Create order with default paymentMethodType cash
+    const order = await OrderModel.create({
+        user: user._id,
+        cartItems: cart.cartItems,
+        shippingAddress: shippingAddress,
+        isPaid: true,
+        paidAt: Date.now(),
+        totalOrderPrice: orderPrice
+    });
+
+    //4- After creating order, decrement 'Product Quantity' , increment 'Product Sold'
+    if (order) {
+        const bulkOptions = cart.cartItems.map(item => ({
+            updateOne: {
+                filter: { _id: item.product },
+                update: { $inc: { quantity: -item.quantity, sold: +item.quantity } }
+            }
+        }))
+        await ProductModel.bulkWrite(bulkOptions, {});
+        //5- Clear cart depend on cartId  
+        await CartModel.findByIdAndDelete(cartId);
+    }
+}
+
+//@desc Webhook will run when stripe payment success paid
+//@route Post /webhook-checkout
+//@accsee Private/Protected/User
+exports.webhookCheckout = asyncHandler(async (req, res, next) => {
     const sig = req.headers['stripe-signature'];
 
     let event;
@@ -140,7 +176,9 @@ exports.webhookCheckout = asyncHandler(async (req, res, next) => {
     if (event.type === 'checkout.session.completed') {
         console.log('Create order here...');
         console.log(event.data.object.client_reference_id);
+        createCartOrder(event.data.object);
     }
+    res.status(200).json({ received: true });
 })
 
 
